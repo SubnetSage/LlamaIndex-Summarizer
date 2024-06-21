@@ -86,10 +86,10 @@ def download_youtube_transcript(video_url):
         with open(transcript_file, "w", encoding='utf-8') as f:
             for item in srt:
                 f.write(f"{item['text']}\n")
-        print("Transcript downloaded successfully.")
+        logging.info("Transcript downloaded successfully.")
         return transcript_file
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logging.error(f"An error occurred: {e}")
         return None
 
 # Load all .txt files from the specified directory
@@ -101,7 +101,7 @@ def load_txt_documents(directory_path):
 
 # Split the loaded documents
 def split_documents(docs):
-    text_splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=100)
+    text_splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=0)
     return text_splitter.split_documents(docs)
 
 # Delete all files in a given directory
@@ -113,7 +113,7 @@ def delete_files_in_directory(directory_path):
             elif file.is_dir():
                 shutil.rmtree(file)
         except Exception as e:
-            print(f'Failed to delete {file}. Reason: {e}')
+            logging.error(f'Failed to delete {file}. Reason: {e}')
 
 # Function to split text into chunks
 def split_text_into_chunks(text, chunk_size=500):
@@ -133,9 +133,12 @@ if __name__ == "__main__":
 
     start_time = time.time()
 
-    # Clear data and storage directories at the beginning
-    delete_files_in_directory(DATA_DIR)
-    delete_files_in_directory(PERSIST_DIR)
+    # Ask if the user wants to delete files in the data and storage directories at the beginning
+    if not is_directory_empty(DATA_DIR) or not is_directory_empty(PERSIST_DIR):
+        delete_confirmation = input("Do you want to delete all files in the data and storage directories? (yes/no): ")
+        if delete_confirmation.lower() == 'yes':
+            delete_files_in_directory(DATA_DIR)
+            delete_files_in_directory(PERSIST_DIR)
 
     # Check if data and storage directories are not empty and log the status
     if is_directory_empty(DATA_DIR):
@@ -160,6 +163,7 @@ if __name__ == "__main__":
 
         # Index the documents
         index = index_documents()
+        logging.info("Indexing completed successfully.")
 
         # Summarize the transcript text using the query engine
         query_str = """
@@ -170,7 +174,7 @@ if __name__ == "__main__":
         The summary should be objective and directly address the content without referring to it as a transcript.
         """
 
-        query_engine = index.as_query_engine(similarity_top_k=2)
+        query_engine = index.as_query_engine(similarity_top_k=1)
 
         # Split the transcript text into manageable chunks
         transcript_chunks = split_text_into_chunks(transcript_text)
@@ -179,20 +183,20 @@ if __name__ == "__main__":
         full_summary = ""
         for chunk in transcript_chunks:
             response = query_engine.query(query_str.format(transcript_text=chunk))
+            logging.debug(f"Chunk response: {response}")
             full_summary += str(response) + "\n"
 
         summary_file_path = os.path.join(DATA_DIR, f"{Path(transcript_file).stem}_summary.txt")
         with open(summary_file_path, "w", encoding='utf-8') as summary_file:
             summary_file.write(full_summary)
+            logging.info(f"Summary written to {summary_file_path}")
             print(full_summary)
 
         # Print a message indicating that the process is complete
+        logging.info("Process completed successfully.")
         print("\nProcess completed successfully.")
 
     end_time = time.time()
     total_duration = end_time - start_time
+    logging.info(f"Total time taken: {total_duration:.2f} seconds")
     print(f"Total time taken: {total_duration:.2f} seconds")
-
-    # Delete all files in the data and storage directories at the end
-    delete_files_in_directory(DATA_DIR)
-    delete_files_in_directory(PERSIST_DIR)

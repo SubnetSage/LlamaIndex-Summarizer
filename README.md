@@ -1,6 +1,6 @@
 # YouTube Transcript Summarizer
 
-This project allows you to download transcripts from YouTube videos, save them to a directory, index the documents, and summarize the content using a language model.
+This project allows you to download transcripts from YouTube videos and summarize the content using a language model.
 
 ## Features
 

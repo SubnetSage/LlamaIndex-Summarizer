@@ -1,13 +1,14 @@
 # YouTube Transcript Summarizer
 
-This project allows you to download transcripts from YouTube videos and summarize the content using a language model.
+This project enables you to download transcripts from YouTube videos and summarize the content using a language model.
 
 ## Features
 
 - Download YouTube video transcripts.
 - Save transcripts to a specified directory.
-- Index the documents for efficient querying.
-- Summarize the transcript content using a language model.
+- Index documents for efficient querying.
+- Summarize transcript content using a language model.
+- Option to clear data and storage folders, ensuring a fresh run each time.
 
 ## Requirements
 
@@ -47,7 +48,7 @@ pip install -r requirements.txt
 python auto_summarize.py
 ```
 
-5. Follow the prompts to enter a YouTube video URL. The transcript will be downloaded, saved, indexed, and summarized.
+5. Follow the prompts to enter a YouTube video URL. The transcript will be downloaded, saved, indexed, and summarized. You will also be asked if you want to clear the data and storage folders before proceeding.
 
 ## Script Overview
 
@@ -60,12 +61,14 @@ The script performs the following tasks:
 5. Defines functions to fetch YouTube video titles and download transcripts.
 6. Loads and splits documents from the specified directory.
 7. Prompts the user for a YouTube video URL, downloads the transcript, saves it to the data directory, and indexes the documents.
-8. Summarizes the transcript content using the query engine and streams the response.
+8. Prompts the user to confirm clearing of data and storage folders.
+9. Summarizes the transcript content using the query engine and streams the response.
 
 ## Example
 
 ```python
 Enter the YouTube Video URL: https://www.youtube.com/watch?v=dQw4w9WgXcQ
+Do you want to clear the data and storage folders? (yes/no): yes
 Transcript downloaded successfully.
 Please summarize the following transcript:
 [Transcript text]

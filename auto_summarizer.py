@@ -1,9 +1,9 @@
-
 import os
 import re
 import requests
 import logging
 import sys
+import argparse
 from pathlib import Path
 from bs4 import BeautifulSoup
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -13,6 +13,8 @@ from llama_index.llms.ollama import Ollama
 from ratelimit import limits, sleep_and_retry
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.document_loaders import TextLoader
+import shutil
+import time
 
 # Set up logging to both stdout and a file
 log_file = "app.log"
@@ -99,12 +101,53 @@ def load_txt_documents(directory_path):
 
 # Split the loaded documents
 def split_documents(docs):
-    text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
+    text_splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=100)
     return text_splitter.split_documents(docs)
+
+# Delete all files in a given directory
+def delete_files_in_directory(directory_path):
+    for file in Path(directory_path).glob('*'):
+        try:
+            if file.is_file() or file.is_symlink():
+                file.unlink()
+            elif file.is_dir():
+                shutil.rmtree(file)
+        except Exception as e:
+            print(f'Failed to delete {file}. Reason: {e}')
+
+# Function to split text into chunks
+def split_text_into_chunks(text, chunk_size=500):
+    return [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
+
+# Check if a directory is empty
+def is_directory_empty(directory_path):
+    return not any(Path(directory_path).iterdir())
 
 # Main execution
 if __name__ == "__main__":
-    video_url = input("Enter the YouTube Video URL: ")
+    parser = argparse.ArgumentParser(description="YouTube Transcript Summarizer")
+    parser.add_argument('video_url', type=str, help='YouTube video URL')
+
+    args = parser.parse_args()
+    video_url = args.video_url
+
+    start_time = time.time()
+
+    # Clear data and storage directories at the beginning
+    delete_files_in_directory(DATA_DIR)
+    delete_files_in_directory(PERSIST_DIR)
+
+    # Check if data and storage directories are not empty and log the status
+    if is_directory_empty(DATA_DIR):
+        logging.info(f"The data directory '{DATA_DIR}' is empty.")
+    else:
+        logging.info(f"The data directory '{DATA_DIR}' is not empty.")
+
+    if is_directory_empty(PERSIST_DIR):
+        logging.info(f"The storage directory '{PERSIST_DIR}' is empty.")
+    else:
+        logging.info(f"The storage directory '{PERSIST_DIR}' is not empty.")
+
     transcript_file = download_youtube_transcript(video_url)
 
     if transcript_file:
@@ -120,19 +163,36 @@ if __name__ == "__main__":
 
         # Summarize the transcript text using the query engine
         query_str = """
-        Please summarize the following transcript:
+        Please provide a detailed summary of the following content, formatted as bullet points. Each bullet point should consist of a couple of sentences, highlighting key points, main topics discussed, and any important conclusions or recommendations made:
 
         {transcript_text}
 
-        The summary should highlight the key points, main topics discussed, and any important conclusions or recommendations made in the transcript.
+        The summary should be objective and directly address the content without referring to it as a transcript.
         """
 
         query_engine = index.as_query_engine(similarity_top_k=2)
-        vector_retriever = index.as_retriever(similarity_top_k=2)
 
-        # Execute the query and print the response
-        response = query_engine.query(query_str.format(transcript_text=transcript_text))
-        print(str(response))
+        # Split the transcript text into manageable chunks
+        transcript_chunks = split_text_into_chunks(transcript_text)
+
+        # Summarize each chunk and combine the summaries
+        full_summary = ""
+        for chunk in transcript_chunks:
+            response = query_engine.query(query_str.format(transcript_text=chunk))
+            full_summary += str(response) + "\n"
+
+        summary_file_path = os.path.join(DATA_DIR, f"{Path(transcript_file).stem}_summary.txt")
+        with open(summary_file_path, "w", encoding='utf-8') as summary_file:
+            summary_file.write(full_summary)
+            print(full_summary)
 
         # Print a message indicating that the process is complete
-        print("Process completed successfully.")
+        print("\nProcess completed successfully.")
+
+    end_time = time.time()
+    total_duration = end_time - start_time
+    print(f"Total time taken: {total_duration:.2f} seconds")
+
+    # Delete all files in the data and storage directories at the end
+    delete_files_in_directory(DATA_DIR)
+    delete_files_in_directory(PERSIST_DIR)

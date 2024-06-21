@@ -1,6 +1,3 @@
-Sure, here's a `README.md` file for your project:
-
-```markdown
 # YouTube Transcript Summarizer
 
 This project allows you to download transcripts from YouTube videos, save them to a directory, index the documents, and summarize the content using a language model.
@@ -88,6 +85,3 @@ This project is licensed under the MIT License. See the LICENSE file for details
 - [RateLimit](https://pypi.org/project/ratelimit/)
 - [LangChain](https://langchain.com/)
 - [Llama Index](https://llamaindex.com/)
-```
-
-This `README.md` file provides a comprehensive overview of your project, including installation instructions, usage, and an explanation of the script's functionality.

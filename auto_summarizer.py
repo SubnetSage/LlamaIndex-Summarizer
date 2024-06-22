@@ -25,10 +25,11 @@ logging.basicConfig(level=logging.DEBUG,
 
 # Set the embedding model and LLM settings
 Settings.embed_model = OllamaEmbedding(model_name="nomic-embed-text")
-Settings.llm = Ollama(model="mistral", request_timeout=360.0)
+Settings.llm = Ollama(model="llama3", request_timeout=360.0)
 
 PERSIST_DIR = "./storage"
 DATA_DIR = "./data"
+SUMMARIES_DIR = "./summaries"
 
 # Rate limit the indexing process to 1 call per 5 seconds
 @sleep_and_retry
@@ -42,12 +43,10 @@ def index_documents():
     index.storage_context.persist(persist_dir=PERSIST_DIR)
     return index
 
-# Ensure the persistence and data directories exist
-if not os.path.exists(PERSIST_DIR):
-    os.makedirs(PERSIST_DIR)
-
-if not os.path.exists(DATA_DIR):
-    os.makedirs(DATA_DIR)
+# Ensure the persistence, data, and summaries directories exist
+for directory in [PERSIST_DIR, DATA_DIR, SUMMARIES_DIR]:
+    if not os.path.exists(directory):
+        os.makedirs(directory)
 
 # Function to fetch YouTube video title
 def get_youtube_video_title(video_url):
@@ -123,13 +122,24 @@ def split_text_into_chunks(text, chunk_size=500):
 def is_directory_empty(directory_path):
     return not any(Path(directory_path).iterdir())
 
+# Function to read URLs from a text file
+def read_urls_from_file(file_path):
+    with open(file_path, "r") as file:
+        urls = [line.strip() for line in file if line.strip()]
+    return urls
+
+def combine_and_deduplicate_summaries(summaries):
+    seen = set()
+    combined_summary = []
+    for summary in summaries:
+        if summary not in seen:
+            seen.add(summary)
+            combined_summary.append(summary)
+    return "\n".join(combined_summary)
+
 # Main execution
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="YouTube Transcript Summarizer")
-    parser.add_argument('video_url', type=str, help='YouTube video URL')
-
-    args = parser.parse_args()
-    video_url = args.video_url
+    urls_file = "E:\\AI Projects\\LlamaIndex RAG\\Youtube Transcript Summarizer\\urls.txt"  # Define the file containing YouTube video URLs directly
 
     start_time = time.time()
 
@@ -151,50 +161,64 @@ if __name__ == "__main__":
     else:
         logging.info(f"The storage directory '{PERSIST_DIR}' is not empty.")
 
-    transcript_file = download_youtube_transcript(video_url)
+    urls = read_urls_from_file(urls_file)
+    for video_url in urls:
+        transcript_file = download_youtube_transcript(video_url)
 
-    if transcript_file:
-        with open(transcript_file, "r", encoding='utf-8') as f:
-            transcript_text = f.read()
+        if transcript_file:
+            with open(transcript_file, "r", encoding='utf-8') as f:
+                transcript_text = f.read()
 
-        # Load and split documents from 'data' directory
-        docs = load_txt_documents(DATA_DIR)
-        documents = split_documents(docs)
+            # Load and split documents from 'data' directory
+            docs = load_txt_documents(DATA_DIR)
+            documents = split_documents(docs)
 
-        # Index the documents
-        index = index_documents()
-        logging.info("Indexing completed successfully.")
+            # Index the documents
+            index = index_documents()
+            logging.info("Indexing completed successfully.")
 
-        # Summarize the transcript text using the query engine
-        query_str = """
-        Please provide a detailed summary of the following content, formatted as bullet points. Each bullet point should consist of a couple of sentences, highlighting key points, main topics discussed, and any important conclusions or recommendations made:
+            # Summarize the transcript text using the query engine
+            query_str = """
+            Please provide a detailed summary of the following chemistry content, formatted as bullet points. Each bullet point should consist of a couple of sentences, highlighting:
 
-        {transcript_text}
+            - Key points
+            - Main topics discussed
+            - Important concepts explained
+            - Experimental methods described
+            - Significant conclusions or recommendations made
 
-        The summary should be objective and directly address the content without referring to it as a transcript.
-        """
+            {transcript_text}
 
-        query_engine = index.as_query_engine(similarity_top_k=1)
+            The summary should be objective and directly address the content without referring to it as a transcript.
+            """
 
-        # Split the transcript text into manageable chunks
-        transcript_chunks = split_text_into_chunks(transcript_text)
+            query_engine = index.as_query_engine(similarity_top_k=1)
 
-        # Summarize each chunk and combine the summaries
-        full_summary = ""
-        for chunk in transcript_chunks:
-            response = query_engine.query(query_str.format(transcript_text=chunk))
-            logging.debug(f"Chunk response: {response}")
-            full_summary += str(response) + "\n"
+            # Split the transcript text into manageable chunks
+            transcript_chunks = split_text_into_chunks(transcript_text)
 
-        summary_file_path = os.path.join(DATA_DIR, f"{Path(transcript_file).stem}_summary.txt")
-        with open(summary_file_path, "w", encoding='utf-8') as summary_file:
-            summary_file.write(full_summary)
-            logging.info(f"Summary written to {summary_file_path}")
-            print(full_summary)
+            # Summarize each chunk and combine the summaries
+            chunk_summaries = []
+            for chunk in transcript_chunks:
+                response = query_engine.query(query_str.format(transcript_text=chunk))
+                logging.debug(f"Chunk response: {response}")
+                chunk_summaries.append(str(response))
 
-        # Print a message indicating that the process is complete
-        logging.info("Process completed successfully.")
-        print("\nProcess completed successfully.")
+            # Combine and deduplicate summaries
+            full_summary = combine_and_deduplicate_summaries(chunk_summaries)
+
+            summary_file_path = os.path.join(SUMMARIES_DIR, f"{Path(transcript_file).stem}_summary.txt")
+            with open(summary_file_path, "w", encoding='utf-8') as summary_file:
+                summary_file.write(full_summary)
+                logging.info(f"Summary written to {summary_file_path}")
+                print(full_summary)
+
+            # Delete files in the storage directory after summarization
+            delete_files_in_directory(PERSIST_DIR)
+
+    # Print a message indicating that the process is complete
+    logging.info("Process completed successfully.")
+    print("\nProcess completed successfully.")
 
     end_time = time.time()
     total_duration = end_time - start_time
